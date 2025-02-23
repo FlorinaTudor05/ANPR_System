@@ -29,10 +29,9 @@
                 videoFeed.style.display = "none";
                 toggleButton.innerText = "Start Camera";
             } else {
-                videoFeed.src = "{{ url_for('video_feed') }}";
+                videoFeed.src = "/video_feed";
                 videoFeed.style.display = "block";
                 toggleButton.innerText = "Stop Camera";
-                startPlateUpdates();  
             }
             cameraRunning = !cameraRunning;
         }
@@ -49,5 +48,8 @@
                     detectedPlatesList.appendChild(listItem);
                 });
             }, 2000);
+        }
+
+        startPlateUpdates();
     </script>
 {% endblock %}

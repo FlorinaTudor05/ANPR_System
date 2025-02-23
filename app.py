@@ -1,7 +1,9 @@
 from flask import Flask, render_template, Response, jsonify
 import cv2
-from deeplearning import yolo_predictions
+import requests
+import numpy as np
 from flask_sqlalchemy import SQLAlchemy
+from deeplearning import yolo_predictions  # YOLO trebuie să fie implementat separat
 
 app = Flask(__name__)
 
@@ -19,36 +21,43 @@ class LicensePlate(db.Model):
 with app.app_context():
     db.create_all()
 
-# Inițializează camera
-camera = cv2.VideoCapture(0)
-detected_plates = []  # 🔥 Listă pentru a stoca numerele detectate
+# URL-ul ESP32-CAM
+ESP32_URL = "http://192.168.1.4/capture"
+detected_plates = []  # Listă pentru a stoca numerele detectate
 
 def generate_frames():
+    """Funcția care preia cadrele de la ESP32-CAM și aplică YOLO pentru recunoaștere"""
     global detected_plates
     while True:
-        success, frame = camera.read()
-        if not success:
-            break
-        else:
-            # Aplică YOLO pentru detectarea numerelor
-            result_frame, text_list = yolo_predictions(frame)
-            detected_plates = []  # Resetează lista la fiecare frame nou
+        try:
+            response = requests.get(ESP32_URL, stream=True, timeout=5)
+            if response.status_code == 200:
+                img_array = np.asarray(bytearray(response.content), dtype=np.uint8)
+                frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
-            with app.app_context():  
-                for plate in text_list:
-                    plate = plate.strip()
-                    existing_plate = LicensePlate.query.filter_by(plate_number=plate).first()
-                    if existing_plate:
-                        detected_plates.append({"number": plate, "status": "EXISTĂ ÎN BAZA DE DATE"})
-                    else:
-                        detected_plates.append({"number": plate, "status": "NU EXISTĂ"})
+                if frame is None:
+                    continue
 
-            # Convertire imagine pentru streaming
-            ret, buffer = cv2.imencode('.jpg', result_frame)
-            frame = buffer.tobytes()
+                # Aplică YOLO pentru detectarea numerelor de înmatriculare
+                result_frame, text_list = yolo_predictions(frame)
+                detected_plates = []  
 
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+                with app.app_context():
+                    for plate in text_list:
+                        plate = plate.strip()
+                        existing_plate = LicensePlate.query.filter_by(plate_number=plate).first()
+                        status = "EXISTĂ ÎN BAZA DE DATE" if existing_plate else "NU EXISTĂ"
+                        detected_plates.append({"number": plate, "status": status})
+
+                # Convertire imagine pentru streaming
+                ret, buffer = cv2.imencode('.jpg', result_frame)
+                frame = buffer.tobytes()
+
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
+        except requests.exceptions.RequestException as e:
+            print(f"🚨 Eroare la conectare cu ESP32-CAM: {e}")
 
 @app.route('/')
 def index():
@@ -56,11 +65,12 @@ def index():
 
 @app.route('/video_feed')
 def video_feed():
+    """Returnează fluxul video pentru browser"""
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/add_plate/<plate>')
 def add_plate(plate):
-    """Adaugă un număr de înmatriculare în baza de date."""
+    """Adaugă un număr de înmatriculare în baza de date"""
     with app.app_context():
         existing_plate = LicensePlate.query.filter_by(plate_number=plate).first()
         if not existing_plate:
@@ -77,4 +87,4 @@ def get_detected_plates():
     return jsonify(detected_plates)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, threaded=True)
