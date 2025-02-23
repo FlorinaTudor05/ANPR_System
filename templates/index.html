@@ -1,0 +1,54 @@
+{% extends 'layout.html' %}
+
+{% block body %}
+    <div class="container text-center">
+        <h2>Real-Time License Plate Detection</h2>
+        <br>
+
+        <!-- Buton Start/Stop -->
+        <button id="toggleCamera" class="btn btn-primary" onclick="toggleCamera()">Start Camera</button>
+        <br><br>
+
+        <!-- Flux video -->
+        <img id="videoFeed" src="" width="80%" style="display: none;">
+
+        <!-- Lista numerelor detectate -->
+        <h3>Numere detectate:</h3>
+        <ul id="detectedPlates"></ul>
+    </div>
+
+    <script>
+        let cameraRunning = false;
+        let videoFeed = document.getElementById("videoFeed");
+        let toggleButton = document.getElementById("toggleCamera");
+        let detectedPlatesList = document.getElementById("detectedPlates");
+
+        function toggleCamera() {
+            if (cameraRunning) {
+                videoFeed.src = "";
+                videoFeed.style.display = "none";
+                toggleButton.innerText = "Start Camera";
+            } else {
+                videoFeed.src = "{{ url_for('video_feed') }}";
+                videoFeed.style.display = "block";
+                toggleButton.innerText = "Stop Camera";
+                startPlateUpdates();  // 🔥 Începe actualizarea listei
+            }
+            cameraRunning = !cameraRunning;
+        }
+
+        function startPlateUpdates() {
+            setInterval(async () => {
+                let response = await fetch("/get_detected_plates");
+                let plates = await response.json();
+                detectedPlatesList.innerHTML = "";  // Șterge lista anterioară
+
+                plates.forEach(plate => {
+                    let listItem = document.createElement("li");
+                    listItem.innerText = `${plate.number} - ${plate.status}`;
+                    detectedPlatesList.appendChild(listItem);
+                });
+            }, 2000); // 🔥 Actualizare la fiecare 2 secunde
+        }
+    </script>
+{% endblock %}
