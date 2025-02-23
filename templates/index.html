@@ -32,7 +32,7 @@
                 videoFeed.src = "{{ url_for('video_feed') }}";
                 videoFeed.style.display = "block";
                 toggleButton.innerText = "Stop Camera";
-                startPlateUpdates();  // 🔥 Începe actualizarea listei
+                startPlateUpdates();  
             }
             cameraRunning = !cameraRunning;
         }
@@ -41,14 +41,13 @@
             setInterval(async () => {
                 let response = await fetch("/get_detected_plates");
                 let plates = await response.json();
-                detectedPlatesList.innerHTML = "";  // Șterge lista anterioară
+                detectedPlatesList.innerHTML = "";  
 
                 plates.forEach(plate => {
                     let listItem = document.createElement("li");
                     listItem.innerText = `${plate.number} - ${plate.status}`;
                     detectedPlatesList.appendChild(listItem);
                 });
-            }, 2000); // 🔥 Actualizare la fiecare 2 secunde
-        }
+            }, 2000);
     </script>
 {% endblock %}
