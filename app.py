@@ -1,33 +1,6 @@
-from flask import Flask, render_template, Response, jsonify
-import cv2
-import requests
-import numpy as np
-from flask_sqlalchemy import SQLAlchemy
-from deeplearning import yolo_predictions  # YOLO trebuie să fie implementat separat
-
-app = Flask(__name__)
-
-# Configurare baza de date SQLite
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///license_plates.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
-
-# Definire model pentru baza de date
-class LicensePlate(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    plate_number = db.Column(db.String(20), unique=True, nullable=False)
-
-# Creare baza de date
-with app.app_context():
-    db.create_all()
-
-# URL-ul ESP32-CAM
-ESP32_URL = "http://192.168.1.4/capture"
-detected_plates = []  # Listă pentru a stoca numerele detectate
-
 def generate_frames():
-    """Funcția care preia cadrele de la ESP32-CAM și aplică YOLO pentru recunoaștere"""
-    global detected_plates
+    """Preia cadrele de la ESP32-CAM și aplică YOLO pentru recunoaștere"""
+    global detected_plates, latest_cropped_plate
     while True:
         try:
             response = requests.get(ESP32_URL, stream=True, timeout=5)
@@ -39,15 +12,43 @@ def generate_frames():
                     continue
 
                 # Aplică YOLO pentru detectarea numerelor de înmatriculare
-                result_frame, text_list = yolo_predictions(frame)
+                result_frame, text_list, bounding_boxes, confidence_scores = yolo_predictions(frame)
+
                 detected_plates = []  
+                cropped_plate = None  # Inițializăm plăcuța decupată
 
                 with app.app_context():
-                    for plate in text_list:
+                    for idx, plate in enumerate(text_list):
                         plate = plate.strip()
-                        existing_plate = LicensePlate.query.filter_by(plate_number=plate).first()
-                        status = "EXISTĂ ÎN BAZA DE DATE" if existing_plate else "NU EXISTĂ"
-                        detected_plates.append({"number": plate, "status": status})
+                        confidence = confidence_scores[idx]
+
+                        if confidence > 0.50:  # Dacă YOLO detectează o plăcuță cu scor mare
+                            x, y, w, h = bounding_boxes[idx]  # Bounding box real
+
+                            # 🔹 Ajustăm coordonatele bounding box-ului
+                            img_h, img_w, _ = frame.shape  # Dimensiunile imaginii originale
+
+                            x = int(x * img_w)  # Convertim coordonatele YOLO în pixelii reali
+                            y = int(y * img_h)
+                            w = int(w * img_w)
+                            h = int(h * img_h)
+
+                            # 🛑 Asigurăm că bounding box-ul este în limitele imaginii
+                            x = max(0, x)
+                            y = max(0, y)
+                            w = min(img_w - x, w)
+                            h = min(img_h - y, h)
+
+                            # 📌 Facem crop exact pe plăcuța detectată
+                            cropped_plate = frame[y:y+h, x:x+w]
+
+                            # Salvăm imaginea decupată
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            latest_cropped_plate = os.path.join(IMAGE_FOLDER, f"plate_{timestamp}.jpg")
+                            cv2.imwrite(latest_cropped_plate, cropped_plate)
+
+                            detected_plates.append({"number": plate, "status": "DETECTAT CU SUCCES"})
+                            break  # Oprire după prima plăcuță detectată
 
                 # Convertire imagine pentru streaming
                 ret, buffer = cv2.imencode('.jpg', result_frame)
@@ -58,33 +59,3 @@ def generate_frames():
 
         except requests.exceptions.RequestException as e:
             print(f"🚨 Eroare la conectare cu ESP32-CAM: {e}")
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/video_feed')
-def video_feed():
-    """Returnează fluxul video pentru browser"""
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-@app.route('/add_plate/<plate>')
-def add_plate(plate):
-    """Adaugă un număr de înmatriculare în baza de date"""
-    with app.app_context():
-        existing_plate = LicensePlate.query.filter_by(plate_number=plate).first()
-        if not existing_plate:
-            new_plate = LicensePlate(plate_number=plate)
-            db.session.add(new_plate)
-            db.session.commit()
-            return f"Numărul {plate} a fost adăugat cu succes!"
-        else:
-            return f"Numărul {plate} există deja în baza de date!"
-
-@app.route('/get_detected_plates')
-def get_detected_plates():
-    """Returnează lista numerelor detectate și statusul lor"""
-    return jsonify(detected_plates)
-
-if __name__ == "__main__":
-    app.run(debug=True, threaded=True)

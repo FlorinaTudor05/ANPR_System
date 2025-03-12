@@ -1,0 +1,39 @@
+{% extends 'layout.html' %}
+
+{% block body %}
+<div class="container">
+    <h2 class="text-center mt-4">Lista Numerelor de Înmatriculare</h2>
+    
+    <table class="table table-striped mt-3">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Număr Înmatriculare</th>
+                <th>Acțiuni</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for plate in plates %}
+            <tr>
+                <td>{{ plate.id }}</td>
+                <td>{{ plate.plate_number }}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm" onclick="deletePlate('{{ plate.id }}')">Șterge</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+    async function deletePlate(id) {
+        if (confirm("Sigur vrei să ștergi acest număr de înmatriculare?")) {
+            let response = await fetch(`/delete_plate/${id}`, { method: "DELETE" });
+            let result = await response.text();
+            alert(result);
+            location.reload();  // Reîncarcă pagina după ștergere
+        }
+    }
+</script>
+{% endblock %}
