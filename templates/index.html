@@ -1,70 +1,85 @@
 {% extends 'layout.html' %}
 
 {% block body %}
-<div class="container text-center">
-    <h2>Real-Time License Plate Detection</h2>
-    <br>
-
+<div class="container text-center mt-5">
     <!-- Flux video -->
-    <div>
-        <img id="videoFeed" src="/video_feed" width="40%" style="border: 2px solid black; border-radius: 8px;">
+    <div class="mt-4 p-3 bg-light shadow rounded">
+        <h4 class="text-secondary">📹 Flux Video</h4>
+        <img id="videoFeed" src="" class="border rounded img-fluid shadow-lg" width="60%">
     </div>
-    <br>
-
-    <!-- Butoane -->
-    <div>
-        <button id="toggleCamera" class="btn btn-primary" onclick="toggleCamera()">🎥 Start Camera</button>
-    </div>
-    <br>
-
-    <!-- Imaginea decupată a plăcuței -->
-    <h3>Plăcuță decupată detectată:</h3>
-    <img id="croppedPlate" src="" style="display: none; max-width: 30%; margin-top: 10px; border: 2px solid red; border-radius: 8px;">
     
+    <!-- Butoane -->
+    <div class="mt-4 d-flex justify-content-center gap-3">
+        <button id="toggleCamera" class="btn btn-lg btn-primary shadow-sm">🎥 Pornește Camera</button>
+        <button id="captureButton" class="btn btn-lg btn-success shadow-sm">📸 Capturează Imagine</button>
+    </div>
+
+    <!-- Imaginea prelucrată -->
+    <div class="mt-4 p-3 bg-white shadow rounded">
+        <h4 class="text-secondary">📑 Plăcuță decupată detectată:</h4>
+        <img id="processedImage" src="" class="border rounded img-fluid shadow-lg" width="40%" style="display: none;">
+    </div>
+
     <!-- Lista numerelor detectate -->
-    <h3>Numere detectate:</h3>
-    <ul id="capturedPlates"></ul>
+    <div class="mt-4 p-3 bg-light shadow rounded">
+        <h4 class="text-secondary">🔢 Numere detectate:</h4>
+        <ul id="capturedPlates" class="list-group"></ul>
+    </div>
 </div>
+
+<footer class="text-center mt-5 py-3 bg-dark text-white rounded shadow-lg">
+    <p class="mb-0">&copy; 2025 - Detectare Automată a Plăcuțelor de Înmatriculare</p>
+</footer>
 
 <script>
     let cameraRunning = false;
     let videoFeed = document.getElementById("videoFeed");
     let toggleButton = document.getElementById("toggleCamera");
+    let captureButton = document.getElementById("captureButton");
+    let processedImage = document.getElementById("processedImage");
     let detectedPlatesList = document.getElementById("capturedPlates");
-    let croppedPlateImg = document.getElementById("croppedPlate");
 
-    function toggleCamera() {
+    toggleButton.addEventListener("click", function() {
         if (cameraRunning) {
             videoFeed.src = "";
             videoFeed.style.display = "none";
-            toggleButton.innerText = "Start Camera";
+            toggleButton.innerText = "🎥 Pornește Camera";
+            processedImage.style.display = "none";
         } else {
             videoFeed.src = "/video_feed";
             videoFeed.style.display = "block";
-            toggleButton.innerText = "Stop Camera";
+            toggleButton.innerText = "⏹️ Oprește Camera";
         }
         cameraRunning = !cameraRunning;
-    }
+    });
+
+    captureButton.addEventListener("click", async function() {
+        let response = await fetch("/capture");
+        let data = await response.json();
+        if (data.image) {
+            processedImage.src = data.image + "?t=" + new Date().getTime();
+            processedImage.style.display = "block";
+            videoFeed.src = "";
+            videoFeed.style.display = "none";
+            toggleButton.innerText = "🎥 Pornește Camera";
+            cameraRunning = false;
+        } else {
+            alert("Eroare la capturarea imaginii!");
+        }
+    });
 
     function startPlateUpdates() {
         setInterval(async () => {
             let response = await fetch("/get_detected_plates");
             let plates = await response.json();
-            detectedPlatesList.innerHTML = "";  
+            detectedPlatesList.innerHTML = "";
 
             plates.forEach(plate => {
                 let listItem = document.createElement("li");
+                listItem.className = "list-group-item list-group-item-light fw-bold";
                 listItem.innerText = `${plate.number} - ${plate.status}`;
                 detectedPlatesList.appendChild(listItem);
             });
-
-            // Actualizează imaginea cu plăcuța decupată
-            let croppedResponse = await fetch("/get_cropped_plate");
-            if (croppedResponse.ok) {
-                croppedPlateImg.src = "/get_cropped_plate";
-                croppedPlateImg.style.display = "block";
-            }
-
         }, 2000);
     }
 
