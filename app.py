@@ -5,8 +5,39 @@ import tensorflow as tf
 import requests
 import os
 from datetime import datetime
-
+import sqlite3
 app = Flask(__name__)
+
+DB_PATH = "plates.db"
+
+def init_db():
+    """Creează baza de date și tabela pentru plăcuțele detectate."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS plates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            number TEXT NOT NULL UNIQUE,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# Inițializează baza de date la pornirea aplicației
+init_db
+
+def save_plate(number):
+    """Salvează un număr detectat în baza de date, evitând duplicatele."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM plates WHERE number = ?", (number,))
+    existing = cursor.fetchone()
+    if not existing:
+        cursor.execute("INSERT INTO plates (number) VALUES (?)", (number,))
+        conn.commit()
+    conn.close()
+
 
 # Configurare directoare și URL ESP32-CAM
 ESP32_URL = "http://192.168.1.7/capture"
@@ -106,9 +137,15 @@ def video_feed():
 
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+
+@app.route('/view_plates')
+def view_plates():
+    return render_template('plates_view.html')
+
+
 @app.route('/capture')
 def capture_image():
-    """Capturează imaginea, detectează plăcuța și aplică OCR."""
+    """Capturează imaginea, detectează plăcuța și o salvează în baza de date."""
     global latest_processed_image
     try:
         response = requests.get(ESP32_URL, stream=True, timeout=5)
@@ -123,9 +160,10 @@ def capture_image():
                 return jsonify({"error": "Nu s-a detectat nicio plăcuță."})
 
             plate_number = recognize_plate(plate_image)
+            if not plate_number:
+                return jsonify({"error": "Nu s-au putut recunoaște caractere."})
 
-            cv2.putText(plate_image, plate_number, (10, 50), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            save_plate(plate_number)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             latest_processed_image = os.path.join(IMAGE_FOLDER, f"plate_{timestamp}.jpg")
@@ -133,9 +171,43 @@ def capture_image():
 
             return jsonify({"image": f"/get_processed_image?t={timestamp}", "plate": plate_number})
         else:
-            return jsonify({"error": "Eroare la preluarea imaginii."})
+            return jsonify({"error": "Eroare la preluarea imaginii de la ESP32-CAM."})
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Eroare la conectare cu ESP32-CAM: {e}"})
+
+
+
+
+# @app.route('/capture')
+# def capture_image():
+#     """Capturează imaginea, detectează plăcuța și aplică OCR."""
+#     global latest_processed_image
+#     try:
+#         response = requests.get(ESP32_URL, stream=True, timeout=5)
+#         if response.status_code == 200:
+#             img_array = np.asarray(bytearray(response.content), dtype=np.uint8)
+#             frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+#             if frame is None:
+#                 return jsonify({"error": "Nu s-a putut prelua imaginea."})
+
+#             plate_image = process_plate_detection(frame)
+#             if plate_image is None:
+#                 return jsonify({"error": "Nu s-a detectat nicio plăcuță."})
+
+#             plate_number = recognize_plate(plate_image)
+
+#             cv2.putText(plate_image, plate_number, (10, 50), 
+#                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+#             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#             latest_processed_image = os.path.join(IMAGE_FOLDER, f"plate_{timestamp}.jpg")
+#             cv2.imwrite(latest_processed_image, plate_image)
+
+#             return jsonify({"image": f"/get_processed_image?t={timestamp}", "plate": plate_number})
+#         else:
+#             return jsonify({"error": "Eroare la preluarea imaginii."})
+#     except requests.exceptions.RequestException as e:
+#         return jsonify({"error": f"Eroare la conectare cu ESP32-CAM: {e}"})
 
 @app.route('/get_processed_image')
 def get_processed_image():
@@ -143,6 +215,27 @@ def get_processed_image():
     if latest_processed_image and os.path.exists(latest_processed_image):
         return send_from_directory(IMAGE_FOLDER, os.path.basename(latest_processed_image))
     return jsonify({"error": "Nu există imagine prelucrată."})
+
+@app.route('/get_plates')
+def get_plates():
+    """Returnează toate plăcuțele detectate."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM plates ORDER BY timestamp DESC")
+    plates = cursor.fetchall()
+    conn.close()
+    return jsonify(plates)
+
+@app.route('/delete_plate/<int:plate_id>', methods=['DELETE'])
+def delete_plate_route(plate_id):
+    """Șterge un număr din baza de date după ID."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM plates WHERE id = ?", (plate_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "message": "Numărul a fost șters"})
+
 
 if __name__ == "__main__":
     app.run(debug=True, threaded=True)
