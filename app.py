@@ -40,13 +40,13 @@ def save_plate(number):
 
 
 # Configurare directoare și URL ESP32-CAM
-ESP32_URL = "http://192.168.1.7/capture"
+ESP32_URL = "http://192.168.1.8/capture"
 IMAGE_FOLDER = "processed_images"
 os.makedirs(IMAGE_FOLDER, exist_ok=True)
 latest_processed_image = None
 
 # Încarcă modelul antrenat MobileNet
-MODEL_PATH = r"C:\Users\Florina\Downloads\Module_5_WebApp_yolo\mobilnet.keras"
+MODEL_PATH = r"C:\Users\Florina\Desktop\DetectorPlacute\mobilnet.keras"
 model = tf.keras.models.load_model(MODEL_PATH)
 
 # Etichetele claselor (cifre + litere)
