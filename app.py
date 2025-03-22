@@ -11,7 +11,6 @@ app = Flask(__name__)
 DB_PATH = "plates.db"
 
 def init_db():
-    """Creează baza de date și tabela pentru plăcuțele detectate."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -24,7 +23,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Inițializează baza de date la pornirea aplicației
 init_db
 
 def save_plate(number):
@@ -38,22 +36,17 @@ def save_plate(number):
         conn.commit()
     conn.close()
 
-
-# Configurare directoare și URL ESP32-CAM
 ESP32_URL = "http://192.168.1.8/capture"
 IMAGE_FOLDER = "processed_images"
 os.makedirs(IMAGE_FOLDER, exist_ok=True)
 latest_processed_image = None
 
-# Încarcă modelul antrenat MobileNet
 MODEL_PATH = r"C:\Users\Florina\Desktop\DetectorPlacute\mobilnet.keras"
 model = tf.keras.models.load_model(MODEL_PATH)
 
-# Etichetele claselor (cifre + litere)
 class_labels = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 def classify_character(image):
-    """Clasifică un caracter folosind modelul MobileNet."""
     image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     image = cv2.resize(image, (120, 120))
     image = np.expand_dims(image, axis=-1)
@@ -67,7 +60,6 @@ def classify_character(image):
     return class_labels[predicted_index]
 
 def recognize_plate(plate_image):
-    """Extrage și clasifică caracterele din plăcuță."""
     gray = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
     thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                    cv2.THRESH_BINARY_INV, 11, 2)
@@ -93,7 +85,6 @@ def recognize_plate(plate_image):
     return detected_text
 
 def process_plate_detection(image):
-    """Detectează plăcuța de înmatriculare și returnează regiunea decupată."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 50, 200)
@@ -176,49 +167,14 @@ def capture_image():
         return jsonify({"error": f"Eroare la conectare cu ESP32-CAM: {e}"})
 
 
-
-
-# @app.route('/capture')
-# def capture_image():
-#     """Capturează imaginea, detectează plăcuța și aplică OCR."""
-#     global latest_processed_image
-#     try:
-#         response = requests.get(ESP32_URL, stream=True, timeout=5)
-#         if response.status_code == 200:
-#             img_array = np.asarray(bytearray(response.content), dtype=np.uint8)
-#             frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-#             if frame is None:
-#                 return jsonify({"error": "Nu s-a putut prelua imaginea."})
-
-#             plate_image = process_plate_detection(frame)
-#             if plate_image is None:
-#                 return jsonify({"error": "Nu s-a detectat nicio plăcuță."})
-
-#             plate_number = recognize_plate(plate_image)
-
-#             cv2.putText(plate_image, plate_number, (10, 50), 
-#                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-#             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#             latest_processed_image = os.path.join(IMAGE_FOLDER, f"plate_{timestamp}.jpg")
-#             cv2.imwrite(latest_processed_image, plate_image)
-
-#             return jsonify({"image": f"/get_processed_image?t={timestamp}", "plate": plate_number})
-#         else:
-#             return jsonify({"error": "Eroare la preluarea imaginii."})
-#     except requests.exceptions.RequestException as e:
-#         return jsonify({"error": f"Eroare la conectare cu ESP32-CAM: {e}"})
-
 @app.route('/get_processed_image')
 def get_processed_image():
-    """Returnează ultima imagine prelucrată."""
     if latest_processed_image and os.path.exists(latest_processed_image):
         return send_from_directory(IMAGE_FOLDER, os.path.basename(latest_processed_image))
     return jsonify({"error": "Nu există imagine prelucrată."})
 
 @app.route('/get_plates')
 def get_plates():
-    """Returnează toate plăcuțele detectate."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM plates ORDER BY timestamp DESC")
@@ -228,7 +184,6 @@ def get_plates():
 
 @app.route('/delete_plate/<int:plate_id>', methods=['DELETE'])
 def delete_plate_route(plate_id):
-    """Șterge un număr din baza de date după ID."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM plates WHERE id = ?", (plate_id,))

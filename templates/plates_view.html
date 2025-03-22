@@ -64,14 +64,12 @@
                 let result = await response.json();
                 if (result.success) {
                     alert("Numărul a fost șters!");
-                    loadPlates(); // Reîncarcă tabelul
+                    loadPlates(); 
                 } else {
                     alert("Eroare la ștergere!");
                 }
             }
         }
-
-        // Încarcă datele la deschiderea paginii
         window.onload = loadPlates;
     </script>
 
