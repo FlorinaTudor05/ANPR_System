@@ -35,9 +35,14 @@ def save_plate(number):
     if not existing:
         cursor.execute("INSERT INTO plates (number, judet) VALUES (?, ?)", (number, judet))
         conn.commit()
-    conn.close()
+        conn.close()
+        return True 
+    else:
+        conn.close()
+        return False
 
-ESP32_URL = "http://192.168.1.5/capture"
+
+ESP32_URL = "http://192.168.1.6/capture"
 IMAGE_FOLDER = "processed_images"
 os.makedirs(IMAGE_FOLDER, exist_ok=True)
 latest_processed_image = None
@@ -113,7 +118,7 @@ def view_plates():
 
 @app.route('/capture')
 def capture_image():
-    """Capturează imaginea, detectează plăcuța și o salvează în baza de date."""
+    """Capturează imaginea, detectează plăcuța și o salvează în baza de date (dacă nu există deja)."""
     global latest_processed_image
     try:
         response = requests.get(ESP32_URL, stream=True, timeout=5)
@@ -122,17 +127,32 @@ def capture_image():
             frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
             if frame is None:
                 return jsonify({"error": "Nu s-a putut prelua imaginea."})
+            
             plate_image = process_plate_detection(frame)
             if plate_image is None:
                 return jsonify({"error": "Nu s-a detectat nicio plăcuță."})
+            
             plate_number = recognize_plate(plate_image)
             if not plate_number:
                 return jsonify({"error": "Nu s-au putut recunoaște caractere."})
-            save_plate(plate_number)
+            
+            inserted = save_plate(plate_number) 
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             latest_processed_image = os.path.join(IMAGE_FOLDER, f"plate_{timestamp}.jpg")
             cv2.imwrite(latest_processed_image, plate_image)
-            return jsonify({"image": f"/get_processed_image?t={timestamp}", "plate": plate_number})
+
+            if inserted:
+                msg = f"Numărul {plate_number} a fost salvat în baza de date."
+            else:
+                msg = f"Numărul {plate_number} există deja în baza de date."
+
+            return jsonify({
+                "image": f"/get_processed_image?t={timestamp}",
+                "plate": plate_number,
+                "message": msg
+            })
+
         else:
             return jsonify({"error": "Eroare la preluarea imaginii de la ESP32-CAM."})
     except requests.exceptions.RequestException as e:

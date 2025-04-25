@@ -1,4 +1,3 @@
-
 {% extends 'layout.html' %}
 {% block body %}
 <nav class="navbar navbar-expand-lg shadow-sm" style="background: linear-gradient(to right, #343a40, #212529); height: 60px;">
@@ -8,13 +7,15 @@
         </a>
     </div>
 </nav>
+
 <div class="container text-center mt-5">
     <div class="mt-4 p-4 bg-white shadow rounded border">
         <h4 class="text-secondary mb-3 text-center"><i class="fas fa-video"></i> Flux Video</h4>
         <div class="d-flex justify-content-center">
             <img id="videoFeed" src="" class="border rounded img-fluid shadow-lg" width="30%" style="display: none;">
         </div>
-          </div>
+    </div>
+
     <div class="mt-4 d-flex justify-content-center gap-3">
         <button id="toggleCamera" class="btn btn-lg btn-primary shadow-sm fw-bold px-4">
             🎥 Pornește Camera
@@ -23,17 +24,20 @@
             📸 Capturează Imagine
         </button>
     </div>
+
     <div class="mt-4 p-4 bg-white shadow rounded border">
         <h4 class="text-secondary mb-3 text-center"><i class="fas fa-file-image"></i> Plăcuță detectată</h4>
         <div class="d-flex justify-content-center">
             <img id="processedImage" src="" class="border rounded img-fluid shadow-lg" width="40%" style="display: none;">
         </div>
-         <p id="plateNumber" class="fw-bold text-primary mt-3 fs-4"></p>
+        <div id="detectionMessage" class="alert mt-3 d-none fade show" role="alert"></div>
     </div>
 </div>
+
 <footer class="text-center mt-5 py-3 bg-dark text-white rounded shadow-lg">
     <p class="mb-0">&copy; 2025 - Detectare Automată a Plăcuțelor de Înmatriculare</p>
 </footer>
+
 <style>
     body {
         background: linear-gradient(to bottom, #f8f9fa, #e9ecef);
@@ -51,6 +55,7 @@
         border: 1px solid #dee2e6 !important;
     }
 </style>
+
 <script>
     let cameraRunning = false;
     let videoFeed = document.getElementById("videoFeed");
@@ -58,7 +63,9 @@
     let captureButton = document.getElementById("captureButton");
     let processedImage = document.getElementById("processedImage");
     let plateNumber = document.getElementById("plateNumber");
-    toggleButton.addEventListener("click", function() {
+    let detectionMessage = document.getElementById("detectionMessage");
+
+    toggleButton.addEventListener("click", function () {
         if (cameraRunning) {
             videoFeed.src = "";
             videoFeed.style.display = "none";
@@ -70,9 +77,11 @@
         }
         cameraRunning = !cameraRunning;
     });
-    captureButton.addEventListener("click", async function() {
+
+    captureButton.addEventListener("click", async function () {
         let response = await fetch("/capture");
         let data = await response.json();
+
         if (data.image) {
             processedImage.src = data.image + "?t=" + new Date().getTime();
             processedImage.style.display = "block";
@@ -82,7 +91,21 @@
             toggleButton.innerText = "🎥 Pornește Camera";
             cameraRunning = false;
         } else {
-            alert("❌ Eroare la capturarea imaginii!");
+            processedImage.style.display = "none";
+            plateNumber.innerText = "";
+        }
+
+        if (data.message) {
+            detectionMessage.innerText = data.message;
+            detectionMessage.classList.remove("d-none", "alert-success", "alert-secondary");
+
+            if (data.message.includes("salvat")) {
+                detectionMessage.classList.add("alert-success");
+            } else {
+                detectionMessage.classList.add("alert-secondary");
+            }
+        } else {
+            detectionMessage.classList.add("d-none");
         }
     });
 </script>
