@@ -8,6 +8,7 @@ from datetime import datetime
 import sqlite3
 app = Flask(__name__)
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plates.db")
+
 CODURI_JUDETE = {
     "AB": "Alba", "AR": "Arad", "AG": "Argeș", "BC": "Bacău", "BH": "Bihor",
     "BN": "Bistrița-Năsăud", "BR": "Brăila", "BT": "Botoșani", "BV": "Brașov", "BZ": "Buzău",
@@ -41,14 +42,14 @@ def save_plate(number):
         conn.close()
         return False
 
-
-ESP32_URL = "http://192.168.1.6/capture"
+ESP32_URL = "http://192.168.1.7/capture"
 IMAGE_FOLDER = "processed_images"
 os.makedirs(IMAGE_FOLDER, exist_ok=True)
 latest_processed_image = None
 MODEL_PATH = r"C:\Users\Florina\Desktop\DetectorPlacute\vres_cnn_model.keras"
 model = tf.keras.models.load_model(MODEL_PATH)
 class_labels = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
 def classify_character(image):
     image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     image = cv2.resize(image, (120, 120))
@@ -92,9 +93,9 @@ def process_plate_detection(image):
 @app.route('/')
 def index():
     return render_template('index.html')
+
 @app.route('/video_feed')
 def video_feed():
-    """Returnează fluxul video de la ESP32-CAM."""
     def generate_frames():
         while True:
             try:
@@ -118,7 +119,6 @@ def view_plates():
 
 @app.route('/capture')
 def capture_image():
-    """Capturează imaginea, detectează plăcuța și o salvează în baza de date (dacă nu există deja)."""
     global latest_processed_image
     try:
         response = requests.get(ESP32_URL, stream=True, timeout=5)
